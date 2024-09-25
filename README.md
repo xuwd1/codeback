@@ -22,7 +22,7 @@ The `codeback` script, when executed on the remote host, opens up a **local** vs
 This script works as the following:
 1. It first tries to gather the above listed envvars.
 2. It then ssh connect back through the ssh tunnel at localhost:`CODEBACK_REVERSE_PORT` to the local machine.
-3. Finally, it launches a `code` ssh session window on the local machine that opens up the given workspace dir. The local window can broughtup correctly since the script would automaticaly set the necessary`XAUTHORITY`, `DISPLAY` and `WAYLAND_DISPLAY` envvars.
+3. Finally, it launches a `code` ssh session window on the local machine that opens up the given workspace dir. The local window can be broughtup correctly since the script would automaticaly set the necessary`XAUTHORITY`, `DISPLAY` and `WAYLAND_DISPLAY` envvars.
 
 ## Installation
 
