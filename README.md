@@ -1,5 +1,27 @@
 # Codeback
 
+## Usage
+
+1. On your local machine:
+```zsh
+
+connect remote-host 
+# !! It is expected that your ssh config/key is properly setup that a username is not needed
+# Now you can see you are ssh connected to the remote host
+```
+
+2. On the remote host:
+```zsh
+codeback ./workspace
+# !! It is also expected that your remote host has a proper ssh config/key setup
+# Now a vscode window should open up on your local machine with the remote workspace dir opened
+```
+
+## Installation
+
+Arch Linux users can just build and install the `codeback` package using the provided `PKGBUILD`:
+
+1. `makepkg -i`
 
 ## The `connect` python script
 
@@ -24,9 +46,5 @@ This script works as the following:
 2. It then ssh connect back through the ssh tunnel at localhost:`CODEBACK_REVERSE_PORT` to the local machine.
 3. Finally, it launches a `code` ssh session window on the local machine that opens up the given workspace dir. The local window can be broughtup correctly since the script would automaticaly set the necessary`XAUTHORITY`, `DISPLAY` and `WAYLAND_DISPLAY` envvars.
 
-## Installation
 
-Arch Linux users can just build and install the `codeback` package using the provided `PKGBUILD`:
-
-1. `makepkg -i`
 
