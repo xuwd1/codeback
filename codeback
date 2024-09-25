@@ -5,7 +5,7 @@ import subprocess
 import os
 import pathlib
 
-DEFAULT_USERNAME = "david"
+DEFAULT_USERNAME = os.getlogin()
 
 
 def get_envvar(envvar_name:str):
