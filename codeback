@@ -1,0 +1,57 @@
+#! /usr/bin/python3
+
+import argparse
+import subprocess
+import os
+import pathlib
+
+DEFAULT_USERNAME = "david"
+
+
+def get_envvar(envvar_name:str):
+    # fail if the envvar is not set
+    if envvar_name not in os.environ:
+        raise ValueError(f"Environment variable {envvar_name} is not set. Check if the ssh is established using the 'connect' script, or if sshd is configured properly.")
+    return os.environ.get(envvar_name)
+
+class ParsedEnvVars:
+    def __init__(self):
+        self.xauthority = get_envvar("CODEBACK_XAUTHORITY")
+        self.xdisplay = get_envvar("CODEBACK_XDISPLAY")
+        self.wayland_display = get_envvar("CODEBACK_WAYLAND_DISPLAY")
+        self.source_addr = get_envvar("CODEBACK_SOURCE_ADDR")
+        self.reverse_port = get_envvar("CODEBACK_REVERSE_PORT")
+
+def back_trigger_vscode(folder_name, parsed_envvars, username):
+    ssh_connect_command = ["ssh", f"{username}@localhost", "-p", f"{parsed_envvars.reverse_port}"]
+    code_env = [
+        "XAUTHORITY=" + parsed_envvars.xauthority,
+        "DISPLAY=" + parsed_envvars.xdisplay,
+        "WAYLAND_DISPLAY=" + parsed_envvars.wayland_display,
+    ]
+    code_remote_command = [
+        "/usr/bin/code",
+        "-n",
+        "--remote",
+        "ssh-remote+" + parsed_envvars.source_addr,
+        str(folder_name)
+    ]
+    code_remote_command = code_env + code_remote_command
+
+    ssh_command = ssh_connect_command + [" ".join(code_remote_command)]
+    # print(ssh_command)
+
+    subprocess.run(ssh_command)
+
+if __name__ == "__main__":
+    argparser = argparse.ArgumentParser(description="Back open vscode window through ssh tunnel")
+    argparser.add_argument("folder_name", help="The foldername to open in vscode")
+    argparser.add_argument("username", help="The username to use for the connection", default=DEFAULT_USERNAME, type=str, nargs="?")
+
+    args = argparser.parse_args()
+    folder_name = pathlib.Path(args.folder_name).resolve().absolute()
+
+    parsed_envvars = ParsedEnvVars()
+    
+    back_trigger_vscode(folder_name, parsed_envvars, args.username)
+    

@@ -1,0 +1,179 @@
+#! /usr/bin/python3
+
+import argparse
+import subprocess
+import os
+import socket
+import re
+
+REVERSE_PORT_RANGE = range(56789, 57789)
+DEFAULT_USERNAME = os.getlogin()
+DEFAULT_MACHINE_NAME = socket.gethostname()
+
+class PassedEnvVar:
+    def __init__(self):
+        self.env_var_name = None
+        self.env_var_value = None
+    
+    def to_envvar_str(self):
+        return f"{self.env_var_name}={self.env_var_value}"
+
+# may not be needed
+class CodeBackMachineName(PassedEnvVar):
+    def __init__(self, name:str) -> None:
+        self.env_var_name = "CODEBACK_MACHINE_NAME"
+        self.env_var_value = name
+
+    @staticmethod
+    def get_default():
+        return CodeBackMachineName(DEFAULT_MACHINE_NAME)
+
+
+class CodeBackReversePort(PassedEnvVar):
+    def __init__(self, port:int) -> None:
+        self.env_var_name = "CODEBACK_REVERSE_PORT"
+        self.env_var_value = str(port)
+
+class CodeBackSourceAddr(PassedEnvVar):
+    def __init__(self, addr) -> None:
+        self.env_var_name = "CODEBACK_SOURCE_ADDR"
+        self.env_var_value = addr
+
+class CodeBackXAuthority(PassedEnvVar):
+    def __init__(self, xauthority) -> None:
+        self.env_var_name = "CODEBACK_XAUTHORITY"
+        self.env_var_value = xauthority
+
+    @staticmethod
+    def get_default():
+        return CodeBackXAuthority(os.environ.get("XAUTHORITY"))
+
+class CodeBackXDisplay(PassedEnvVar):
+    def __init__(self, xdisplay) -> None:
+        self.env_var_name = "CODEBACK_XDISPLAY"
+        self.env_var_value = xdisplay
+
+    @staticmethod
+    def get_default():
+        return CodeBackXDisplay(os.environ.get("DISPLAY"))
+    
+class CodeBackWaylandDisplay(PassedEnvVar):
+    def __init__(self, wayland_display) -> None:
+        self.env_var_name = "CODEBACK_WAYLAND_DISPLAY"
+        self.env_var_value = wayland_display
+
+    @staticmethod
+    def get_default():
+        return CodeBackWaylandDisplay(os.environ.get("WAYLAND_DISPLAY"))
+    
+
+
+def allocate_remote_reverse_port(server_name, username, connection_port = None):
+    ssh_netstat_tln_command = ["ssh", f"{username}@{server_name}", "netstat -tln"]
+    if connection_port is not None:
+        ssh_netstat_tln_command.insert(1, "-p")
+        ssh_netstat_tln_command.insert(2, str(connection_port))
+    result = subprocess.run(ssh_netstat_tln_command, capture_output=True, text=True)
+    connection_text_list = result.stdout.split("\n")[2:-1]
+    port_extract_re = re.compile(r"\d+\Z")
+    used_ports = []
+    for connection_text in connection_text_list:
+        address_text = connection_text.split()[3]
+        port = int(port_extract_re.search(address_text).group())
+        used_ports.append(port)
+    for port_candidate in REVERSE_PORT_RANGE:
+        if port_candidate not in used_ports:
+            # print(f"Port {port_candidate} is available")
+            return port_candidate
+
+def connect_and_set_auto_reverse_port(server_name, username, connection_port = None):
+    reverse_port = allocate_remote_reverse_port(server_name, username, connection_port)
+    
+    # get passed envvars
+    envvar_codeback_reverse_port = CodeBackReversePort(reverse_port)
+    envvar_codeback_source_addr = CodeBackSourceAddr(server_name)
+    envvar_codeback_xauthority = CodeBackXAuthority.get_default()
+    envvar_codeback_xdisplay = CodeBackXDisplay.get_default()
+    envvar_codeback_wayland_display = CodeBackWaylandDisplay.get_default()
+    envvar_list = [
+        envvar_codeback_reverse_port,
+        envvar_codeback_source_addr,
+        envvar_codeback_xauthority,
+        envvar_codeback_xdisplay,
+        envvar_codeback_wayland_display
+    ]
+
+    ssh_connect_command_ev = os.environ.copy()
+    for envvar in envvar_list:
+        ssh_connect_command_ev[envvar.env_var_name] = envvar.env_var_value
+
+    ssh_connect_command = ["ssh", "-R", f"{reverse_port}:localhost:22" ,f"{username}@{server_name}"] + ["-oSendEnv={}".format(envvar.env_var_name) for envvar in envvar_list]
+    # print(ssh_connect_command)
+
+    os.execvpe("ssh", ssh_connect_command, ssh_connect_command_ev)
+
+# def check_remote_reverse_port(server_name, reverse_port, username, connection_port = None):
+#     if connection_port is not None:
+#         ssh_check_port_command = f"ssh -p {connection_port} {username}@{server_name} \' netstat -tln \'"
+#     else:
+#         ssh_check_port_command = f"ssh {username}@{server_name} \' netstat -tln \'"
+#     result = subprocess.run(ssh_check_port_command, shell=True, check=True, capture_output=True, text=True)
+#     connection_text_list = result.stdout.split("\n")[2:]
+
+#     reverse_port_in_use = False
+#     for connection_text in connection_text_list:
+#         if f":{reverse_port}" in connection_text:
+#             reverse_port_in_use = True
+#             break
+#             # print(f"Port {reverse_port} is already in use on {server_name}")
+#             # return False
+    
+#     return reverse_port_in_use
+  
+
+# def connect_and_set_reverse_port(server_name, reverse_port, username, connection_port = None):
+#     reverse_port_already_exists = check_remote_reverse_port(server_name, reverse_port, username, connection_port)
+#     ssh_tunnel_command = ["ssh",  "-NR", f"{reverse_port}:localhost:22", f"{username}@{server_name}"]
+#     if connection_port is not None:
+#         ssh_tunnel_command.insert(1, "-p")
+#         ssh_tunnel_command.insert(2, str(connection_port))
+    
+#     ssh_connect_command = ["ssh", f"{username}@{server_name}"]
+#     if connection_port is not None:
+#         ssh_connect_command.insert(1, "-p")
+#         ssh_connect_command.insert(2, str(connection_port))
+
+#     if not reverse_port_already_exists:
+
+#         pid = os.fork()
+#         if pid == 0:
+#             # In the child process
+#             os.execvp("ssh", ssh_connect_command)
+#         else:
+#             tunnel_process = subprocess.Popen(ssh_tunnel_command, preexec_fn=os.setsid)
+#             print("SSH tunnel started")
+#             print("tunnel process pid is ", tunnel_process.pid)
+#             # In the parent process
+#             os.waitpid(pid, 0)
+#             print("killing tunnel process")
+#             tunnel_process.kill()
+#     else:
+#         print("Reverse port already set, reusing.")
+#         os.execvp("ssh", ssh_connect_command)
+    
+
+
+
+
+
+if __name__ == "__main__":
+    argparser = argparse.ArgumentParser(description="Connect to a remote server")
+    argparser.add_argument("server_name", help="The server to connect to")
+    argparser.add_argument("username", help="The username to use for the connection", default=DEFAULT_USERNAME, type=str, nargs="?")
+
+    args = argparser.parse_args()
+    server_name = args.server_name
+    username = args.username
+
+    connect_and_set_auto_reverse_port(server_name, username)
+
