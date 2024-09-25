@@ -1,10 +1,11 @@
+# Codeback
 
 
 ## The `connect` python script
 
 The `connect` script works as the following:
 1. Given the remote hostname, it first ssh connects to it and try to find a free port for establishing a reverse ssh tunnel. The free port is found by executing `netstat -tln` on the remote host.
-2. Once the free port is found, the script substitutes itself using `execvpe` with a actual ssh connection to the remote host with the reverse tunnel established.
+2. Once the free port is found, the script substitutes itself using `execvpe` with an actual ssh connection to the remote host with the reverse tunnel established.
   - Alongwith the ssh connection, several envvars are passed to the remote host using ssh -oSendEnv, including:
     - `CODEBACK_XAUTHORITY`: contains a copy of local machine's `XAUTHORITY` envvar
     - `CODEBACK_XDISPLAY`: contains the local machine's `DISPLAY` envvar
@@ -21,5 +22,11 @@ The `codeback` script, when executed on the remote host, opens up a **local** vs
 This script works as the following:
 1. It first tries to gather the above listed envvars.
 2. It then ssh connect back through the ssh tunnel at localhost:`CODEBACK_REVERSE_PORT` to the local machine.
-3. Finally, it launches a `code` ssh session window on the local machine that opens up the given workspace dir. The local window can be shown correctly since it has the `XAUTHORITY`, `DISPLAY` and `WAYLAND_DISPLAY` envvars set correctly.
+3. Finally, it launches a `code` ssh session window on the local machine that opens up the given workspace dir. The local window can broughtup correctly since the script would automaticaly set the necessary`XAUTHORITY`, `DISPLAY` and `WAYLAND_DISPLAY` envvars.
+
+## Installation
+
+Arch Linux users can just build and install the `codeback` package using the provided `PKGBUILD`:
+
+1. `makepkg -i`
 
