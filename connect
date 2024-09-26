@@ -5,6 +5,7 @@ import subprocess
 import os
 import socket
 import re
+import pathlib
 
 REVERSE_PORT_RANGE = range(56789, 57789)
 DEFAULT_USERNAME = os.getlogin()
@@ -65,8 +66,30 @@ class CodeBackWaylandDisplay(PassedEnvVar):
     @staticmethod
     def get_default():
         return CodeBackWaylandDisplay(os.environ.get("WAYLAND_DISPLAY"))
-    
 
+class CodeBackLocalECDSAPubKey(PassedEnvVar):
+    def __init__(self, pubkey_str) -> None:
+        self.env_var_name = "CODEBACK_LOCAL_ECDSA_PUBKEY"
+        self.env_var_value = pubkey_str
+
+    def to_envvar_str(self):
+        return f"{self.env_var_name}='{self.env_var_value}'"
+
+class CodeBackLocalED25519PubKey(PassedEnvVar):
+    def __init__(self, pubkey_str) -> None:
+        self.env_var_name = "CODEBACK_LOCAL_ED25519_PUBKEY"
+        self.env_var_value = pubkey_str
+    
+    def to_envvar_str(self):
+        return f"{self.env_var_name}='{self.env_var_value}'"
+
+class CodeBackLocalRSAPubKey(PassedEnvVar):
+    def __init__(self, pubkey_str) -> None:
+        self.env_var_name = "CODEBACK_LOCAL_RSA_PUBKEY"
+        self.env_var_value = pubkey_str
+
+    def to_envvar_str(self):
+        return f"{self.env_var_name}='{self.env_var_value}'"
 
 def allocate_remote_reverse_port(server_name, username, connection_port = None):
     ssh_netstat_tln_command = ["ssh", f"{username}@{server_name}", "netstat -tln"]
@@ -85,6 +108,49 @@ def allocate_remote_reverse_port(server_name, username, connection_port = None):
         if port_candidate not in used_ports:
             # print(f"Port {port_candidate} is available")
             return port_candidate
+        
+def get_remote_shell(server_name, username, connection_port = None):
+    ssh_connect_command = ["ssh", f"{username}@{server_name}", "echo $SHELL"]
+    if connection_port is not None:
+        ssh_connect_command.insert(1, "-p")
+        ssh_connect_command.insert(2, str(connection_port))
+
+    result = subprocess.run(ssh_connect_command, capture_output=True, text=True)
+    remote_shell_path = result.stdout.strip()
+    return remote_shell_path
+    
+def gather_local_ssh_pubkeys():
+    ecdsa_pubkey_path = pathlib.Path("/etc/ssh/ssh_host_ecdsa_key.pub")
+    ed25519_pubkey_path = pathlib.Path("/etc/ssh/ssh_host_ed25519_key.pub")
+    rsa_pubkey_path = pathlib.Path("/etc/ssh/ssh_host_rsa_key.pub")
+
+    ecdsa_pubkey = None
+    ed25519_pubkey = None
+    rsa_pubkey = None
+
+    def trim_pubkey(pubkey_str):
+        split_pubkey = pubkey_str.split()
+        if len(split_pubkey) == 3:
+            return " ".join([split_pubkey[0], split_pubkey[1]])
+        else:
+            return pubkey_str
+
+    if ecdsa_pubkey_path.exists():
+        with ecdsa_pubkey_path.open("r") as ecdsa_pubkey_file:
+            ecdsa_pubkey_str = trim_pubkey(ecdsa_pubkey_file.read())
+            ecdsa_pubkey = CodeBackLocalECDSAPubKey(ecdsa_pubkey_str)
+    
+    if ed25519_pubkey_path.exists():
+        with ed25519_pubkey_path.open("r") as ed25519_pubkey_file:
+            ed25519_pubkey_str = trim_pubkey(ed25519_pubkey_file.read())
+            ed25519_pubkey = CodeBackLocalED25519PubKey(ed25519_pubkey_str)
+    
+    if rsa_pubkey_path.exists():
+        with rsa_pubkey_path.open("r") as rsa_pubkey_file:
+            rsa_pubkey_str = trim_pubkey(rsa_pubkey_file.read())
+            rsa_pubkey = CodeBackLocalRSAPubKey(rsa_pubkey_str)
+    
+    return ecdsa_pubkey, ed25519_pubkey, rsa_pubkey
 
 def connect_and_set_auto_reverse_port(server_name, username, connection_port = None):
     reverse_port = allocate_remote_reverse_port(server_name, username, connection_port)
@@ -107,62 +173,15 @@ def connect_and_set_auto_reverse_port(server_name, username, connection_port = N
     for envvar in envvar_list:
         ssh_connect_command_ev[envvar.env_var_name] = envvar.env_var_value
 
-    ssh_connect_command = ["ssh", "-R", f"{reverse_port}:localhost:22" ,f"{username}@{server_name}"] + ["-oSendEnv={}".format(envvar.env_var_name) for envvar in envvar_list]
+    ssh_connect_command = ["ssh", "-R", f"{reverse_port}:localhost:22" ,"-t",f"{username}@{server_name}"] + ["-oSendEnv={}".format(envvar.env_var_name) for envvar in envvar_list]
     # print(ssh_connect_command)
 
+    pubkey_envvars = gather_local_ssh_pubkeys()
+    ssh_execute_command = [pubkey.to_envvar_str() for pubkey in pubkey_envvars if pubkey is not None] + [get_remote_shell(server_name, username, connection_port)]
+    ssh_execute_command = " ".join(ssh_execute_command)
+    ssh_connect_command = ssh_connect_command + [ssh_execute_command]
+    
     os.execvpe("ssh", ssh_connect_command, ssh_connect_command_ev)
-
-# def check_remote_reverse_port(server_name, reverse_port, username, connection_port = None):
-#     if connection_port is not None:
-#         ssh_check_port_command = f"ssh -p {connection_port} {username}@{server_name} \' netstat -tln \'"
-#     else:
-#         ssh_check_port_command = f"ssh {username}@{server_name} \' netstat -tln \'"
-#     result = subprocess.run(ssh_check_port_command, shell=True, check=True, capture_output=True, text=True)
-#     connection_text_list = result.stdout.split("\n")[2:]
-
-#     reverse_port_in_use = False
-#     for connection_text in connection_text_list:
-#         if f":{reverse_port}" in connection_text:
-#             reverse_port_in_use = True
-#             break
-#             # print(f"Port {reverse_port} is already in use on {server_name}")
-#             # return False
-    
-#     return reverse_port_in_use
-  
-
-# def connect_and_set_reverse_port(server_name, reverse_port, username, connection_port = None):
-#     reverse_port_already_exists = check_remote_reverse_port(server_name, reverse_port, username, connection_port)
-#     ssh_tunnel_command = ["ssh",  "-NR", f"{reverse_port}:localhost:22", f"{username}@{server_name}"]
-#     if connection_port is not None:
-#         ssh_tunnel_command.insert(1, "-p")
-#         ssh_tunnel_command.insert(2, str(connection_port))
-    
-#     ssh_connect_command = ["ssh", f"{username}@{server_name}"]
-#     if connection_port is not None:
-#         ssh_connect_command.insert(1, "-p")
-#         ssh_connect_command.insert(2, str(connection_port))
-
-#     if not reverse_port_already_exists:
-
-#         pid = os.fork()
-#         if pid == 0:
-#             # In the child process
-#             os.execvp("ssh", ssh_connect_command)
-#         else:
-#             tunnel_process = subprocess.Popen(ssh_tunnel_command, preexec_fn=os.setsid)
-#             print("SSH tunnel started")
-#             print("tunnel process pid is ", tunnel_process.pid)
-#             # In the parent process
-#             os.waitpid(pid, 0)
-#             print("killing tunnel process")
-#             tunnel_process.kill()
-#     else:
-#         print("Reverse port already set, reusing.")
-#         os.execvp("ssh", ssh_connect_command)
-    
-
-
 
 
 
