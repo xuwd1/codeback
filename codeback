@@ -4,6 +4,7 @@ import argparse
 import subprocess
 import os
 import pathlib
+from datetime import datetime
 
 DEFAULT_USERNAME = os.getlogin()
 
@@ -32,7 +33,18 @@ class ParsedEnvVars:
         self.local_ed25519_pubkey = get_optional_envvar("CODEBACK_LOCAL_ED25519_PUBKEY")
         self.local_rsa_pubkey = get_optional_envvar("CODEBACK_LOCAL_RSA_PUBKEY")
 
-def adjust_ssh_known_hosts(parsed_envvars, known_host_file_path = pathlib.Path("~/.ssh/known_hosts").absolute()):
+def adjust_ssh_known_hosts(
+        parsed_envvars,
+        known_host_file_path = pathlib.Path("~/.ssh/known_hosts").absolute(),
+        do_backup = True
+    ):
+    if do_backup:
+        now = datetime.now()
+        backup_filename = pathlib.Path("known_hosts_bak_{}".format(now.strftime("%Y-%m-%d-%H-%M-%S")))
+        with open(known_host_file_path, "r") as current_known_hosts_file:
+            with open(backup_filename, "w") as backup_file:
+                backup_file.write(current_known_hosts_file.read())
+            
     ssh_keygen_remove_cmommand = ["ssh-keygen", "-R", f"[localhost]:{parsed_envvars.reverse_port}"]
     subprocess.run(ssh_keygen_remove_cmommand, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     pubkeys = [parsed_envvars.local_ecdsa_pubkey, parsed_envvars.local_ed25519_pubkey, parsed_envvars.local_rsa_pubkey]

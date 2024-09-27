@@ -65,7 +65,11 @@ class CodeBackWaylandDisplay(PassedEnvVar):
 
     @staticmethod
     def get_default():
-        return CodeBackWaylandDisplay(os.environ.get("WAYLAND_DISPLAY"))
+        wayland_display_envvar = os.environ.get("WAYLAND_DISPLAY")
+        if wayland_display_envvar is None:
+            wayland_display_envvar = "NULL"
+            
+        return CodeBackWaylandDisplay(wayland_display_envvar)
 
 class CodeBackLocalECDSAPubKey(PassedEnvVar):
     def __init__(self, pubkey_str) -> None:
