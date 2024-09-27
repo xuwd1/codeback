@@ -11,7 +11,9 @@ provides=()
 conflicts=()
 groups=()
 
-source=('connect' 'codeback' '99-codeback.conf')
+PKGBUILD_DIR="$(dirname "${BASH_SOURCE[0]}")"
+
+source=("file://${PKGBUILD_DIR}/../connect" "file://${PKGBUILD_DIR}/../codeback" "file://${PKGBUILD_DIR}/../99-codeback.conf")
 sha256sums=('SKIP' 'SKIP' 'SKIP')
 
 package() {

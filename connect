@@ -165,25 +165,26 @@ def connect_and_set_auto_reverse_port(server_name, username, connection_port = N
     envvar_codeback_xauthority = CodeBackXAuthority.get_default()
     envvar_codeback_xdisplay = CodeBackXDisplay.get_default()
     envvar_codeback_wayland_display = CodeBackWaylandDisplay.get_default()
+    envvar_pubkeys = gather_local_ssh_pubkeys()
     envvar_list = [
         envvar_codeback_reverse_port,
         envvar_codeback_source_addr,
         envvar_codeback_xauthority,
         envvar_codeback_xdisplay,
         envvar_codeback_wayland_display
-    ]
+    ] + [pubkey for pubkey in envvar_pubkeys if pubkey is not None]
 
     ssh_connect_command_ev = os.environ.copy()
     for envvar in envvar_list:
         ssh_connect_command_ev[envvar.env_var_name] = envvar.env_var_value
 
-    ssh_connect_command = ["ssh", "-R", f"{reverse_port}:localhost:22" ,"-t",f"{username}@{server_name}"] + ["-oSendEnv={}".format(envvar.env_var_name) for envvar in envvar_list]
+    ssh_connect_command = ["ssh", "-R", f"{reverse_port}:localhost:22" ,f"{username}@{server_name}"] + ["-oSendEnv={}".format(envvar.env_var_name) for envvar in envvar_list]
     # print(ssh_connect_command)
 
-    pubkey_envvars = gather_local_ssh_pubkeys()
-    ssh_execute_command = [pubkey.to_envvar_str() for pubkey in pubkey_envvars if pubkey is not None] + [get_remote_shell(server_name, username, connection_port)]
-    ssh_execute_command = " ".join(ssh_execute_command)
-    ssh_connect_command = ssh_connect_command + [ssh_execute_command]
+    # pubkey_envvars = gather_local_ssh_pubkeys()
+    # ssh_execute_command = [pubkey.to_envvar_str() for pubkey in pubkey_envvars if pubkey is not None] + [get_remote_shell(server_name, username, connection_port)]
+    # ssh_execute_command = " ".join(ssh_execute_command)
+    # ssh_connect_command = ssh_connect_command + [ssh_execute_command]
     
     os.execvpe("ssh", ssh_connect_command, ssh_connect_command_ev)
 

@@ -2,3 +2,6 @@ pkg/
 src/
 *.pkg.tar*
 __pycache__/
+pkgbuild/*
+!pkgbuild/PKGBUILD
+!pkgbuild/README.md
