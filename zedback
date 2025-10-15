@@ -1,0 +1,89 @@
+#! /usr/bin/python3
+
+import argparse
+import subprocess
+import os
+import pathlib
+from datetime import datetime
+
+DEFAULT_USERNAME = os.getlogin()
+
+
+def get_envvar(envvar_name:str):
+    # fail if the envvar is not set
+    if envvar_name not in os.environ:
+        raise ValueError(f"Environment variable {envvar_name} is not set. Check if the ssh is established using the 'connect' script, or if sshd is configured properly.")
+    return os.environ.get(envvar_name)
+
+def get_optional_envvar(envvar_name:str):
+    if envvar_name not in os.environ:
+        return None
+    return os.environ.get(envvar_name)
+
+class ParsedEnvVars:
+    def __init__(self):
+        self.xauthority = get_envvar("CODEBACK_XAUTHORITY")
+        self.xdisplay = get_envvar("CODEBACK_XDISPLAY")
+        self.wayland_display = get_envvar("CODEBACK_WAYLAND_DISPLAY")
+        self.source_addr = get_envvar("CODEBACK_SOURCE_ADDR")
+        self.reverse_port = get_envvar("CODEBACK_REVERSE_PORT")
+
+        # new: passed local pubkeys
+        self.local_ecdsa_pubkey = get_optional_envvar("CODEBACK_LOCAL_ECDSA_PUBKEY")
+        self.local_ed25519_pubkey = get_optional_envvar("CODEBACK_LOCAL_ED25519_PUBKEY")
+        self.local_rsa_pubkey = get_optional_envvar("CODEBACK_LOCAL_RSA_PUBKEY")
+
+def adjust_ssh_known_hosts(
+        parsed_envvars,
+        known_host_file_path = pathlib.Path("~/.ssh/known_hosts").expanduser(),
+        do_backup = True
+    ):
+    if do_backup:
+        now = datetime.now()
+        backup_filename = pathlib.Path("/tmp/known_hosts_bak_{}".format(now.strftime("%Y-%m-%d-%H-%M-%S")))
+        with open(known_host_file_path, "r") as current_known_hosts_file:
+            with open(backup_filename, "w") as backup_file:
+                backup_file.write(current_known_hosts_file.read())
+            
+    ssh_keygen_remove_cmommand = ["ssh-keygen", "-R", f"[localhost]:{parsed_envvars.reverse_port}"]
+    subprocess.run(ssh_keygen_remove_cmommand, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    pubkeys = [parsed_envvars.local_ecdsa_pubkey, parsed_envvars.local_ed25519_pubkey, parsed_envvars.local_rsa_pubkey]
+    pubkeys = [pubkey for pubkey in pubkeys if pubkey is not None]
+    with open(known_host_file_path, "a") as known_hosts_file:
+        for pubkey in pubkeys:
+            pubkey_record_string = f"[localhost]:{parsed_envvars.reverse_port} {pubkey}"
+            known_hosts_file.write(pubkey_record_string + "\n")
+
+def back_trigger_zeditor(foler_name, parsed_envvars, username):
+    adjust_ssh_known_hosts(parsed_envvars)
+    ssh_connect_command = ["ssh", f"{username}@localhost", "-p", f"{parsed_envvars.reverse_port}"]
+    zeditor_env = [
+        "XAUTHORITY=" + parsed_envvars.xauthority,
+        "DISPLAY=" + parsed_envvars.xdisplay,
+        "WAYLAND_DISPLAY=" + parsed_envvars.wayland_display,
+    ]
+    ZEDITOR_REMOTE_SCHEME = r"ssh://{}/{}"
+    zeditor_remote_command = [
+        "/usr/bin/zeditor",
+        "-n",
+        ZEDITOR_REMOTE_SCHEME.format(parsed_envvars.source_addr, str(foler_name))
+    ]
+    zeditor_remote_command = zeditor_env + zeditor_remote_command
+    
+    ssh_command = ssh_connect_command + [" ".join(zeditor_remote_command)]
+    # print(ssh_command)
+    subprocess.run(ssh_command)
+
+
+if __name__ == "__main__":
+    argparser = argparse.ArgumentParser(description="Back open zeditor window through ssh tunnel")
+    argparser.add_argument("folder_name", help="The foldername to open in zeditor")
+    argparser.add_argument("username", help="The username to use for the connection", default=DEFAULT_USERNAME, type=str, nargs="?")
+
+    args = argparser.parse_args()
+    folder_name = pathlib.Path(args.folder_name).resolve().absolute()
+
+    parsed_envvars = ParsedEnvVars()
+    
+    back_trigger_zeditor(folder_name, parsed_envvars, args.username)
+    
