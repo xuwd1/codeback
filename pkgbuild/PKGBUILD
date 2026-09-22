@@ -13,12 +13,13 @@ groups=()
 
 PKGBUILD_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
-source=("file://${PKGBUILD_DIR}/../connect" "file://${PKGBUILD_DIR}/../codeback" "file://${PKGBUILD_DIR}/../99-codeback.conf" "file://${PKGBUILD_DIR}/../zedback")
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+source=("file://${PKGBUILD_DIR}/../connect" "file://${PKGBUILD_DIR}/../codeback" "file://${PKGBUILD_DIR}/../99-codeback.conf" "file://${PKGBUILD_DIR}/../zedback" "file://${PKGBUILD_DIR}/../cursorback")
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
   install -Dm755 $srcdir/connect $pkgdir/usr/bin/connect
   install -Dm755 $srcdir/codeback $pkgdir/usr/bin/codeback
   install -Dm755 $srcdir/zedback $pkgdir/usr/bin/zedback
+  install -Dm755 $srcdir/cursorback $pkgdir/usr/bin/cursorback
   install -Dm644 $srcdir/99-codeback.conf $pkgdir/etc/ssh/sshd_config.d/99-codeback.conf
 }
