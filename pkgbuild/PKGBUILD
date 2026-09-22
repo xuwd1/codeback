@@ -1,6 +1,6 @@
 pkgname=codeback
 pkgrel=1
-pkgver=0.2
+pkgver=0.3
 pkgdesc="efficiency tool for connecting to remote servers and back calling vscode remote session"
 url=""
 arch=(x86_64)
