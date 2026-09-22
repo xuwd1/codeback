@@ -5,3 +5,4 @@ __pycache__/
 pkgbuild/*
 !pkgbuild/PKGBUILD
 !pkgbuild/README.md
+!pkgbuild/clean-pkgbuild-dir.py
