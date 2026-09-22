@@ -1,6 +1,7 @@
 #! /usr/bin/python3
 
 import argparse
+import shlex
 import subprocess
 import os
 import pathlib
@@ -33,44 +34,58 @@ class ParsedEnvVars:
         self.local_ed25519_pubkey = get_optional_envvar("CODEBACK_LOCAL_ED25519_PUBKEY")
         self.local_rsa_pubkey = get_optional_envvar("CODEBACK_LOCAL_RSA_PUBKEY")
 
+def normalize_pubkey(pubkey):
+    parts = pubkey.split()
+    if len(parts) < 2:
+        return None
+    return f"{parts[0]} {parts[1]}"
+
+def format_shell_command(env_vars, argv):
+    assignments = [f"{name}={shlex.quote(value)}" for name, value in env_vars]
+    return " ".join(assignments + [shlex.quote(arg) for arg in argv])
+
 def adjust_ssh_known_hosts(
         parsed_envvars,
         known_host_file_path = pathlib.Path("~/.ssh/known_hosts").expanduser(),
         do_backup = True
     ):
-    if do_backup:
+    known_host_file_path = pathlib.Path(known_host_file_path)
+    if do_backup and known_host_file_path.exists():
         now = datetime.now()
         backup_filename = pathlib.Path("/tmp/known_hosts_bak_{}".format(now.strftime("%Y-%m-%d-%H-%M-%S")))
         with open(known_host_file_path, "r") as current_known_hosts_file:
             with open(backup_filename, "w") as backup_file:
                 backup_file.write(current_known_hosts_file.read())
-            
-    ssh_keygen_remove_cmommand = ["ssh-keygen", "-R", f"[localhost]:{parsed_envvars.reverse_port}"]
-    subprocess.run(ssh_keygen_remove_cmommand, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    host = f"[localhost]:{parsed_envvars.reverse_port}"
+    ssh_keygen_remove_command = ["ssh-keygen", "-R", host, "-f", str(known_host_file_path)]
+    subprocess.run(ssh_keygen_remove_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     pubkeys = [parsed_envvars.local_ecdsa_pubkey, parsed_envvars.local_ed25519_pubkey, parsed_envvars.local_rsa_pubkey]
+    pubkeys = [normalize_pubkey(pubkey) for pubkey in pubkeys if pubkey is not None]
     pubkeys = [pubkey for pubkey in pubkeys if pubkey is not None]
     with open(known_host_file_path, "a") as known_hosts_file:
         for pubkey in pubkeys:
-            pubkey_record_string = f"[localhost]:{parsed_envvars.reverse_port} {pubkey}"
+            pubkey_record_string = f"{host} {pubkey}"
             known_hosts_file.write(pubkey_record_string + "\n")
 
 def back_trigger_zeditor(foler_name, parsed_envvars, username):
     adjust_ssh_known_hosts(parsed_envvars)
     ssh_connect_command = ["ssh", f"{username}@localhost", "-p", f"{parsed_envvars.reverse_port}"]
-    zeditor_env = [
-        "XAUTHORITY=" + parsed_envvars.xauthority,
-        "DISPLAY=" + parsed_envvars.xdisplay,
-        "WAYLAND_DISPLAY=" + parsed_envvars.wayland_display,
-    ]
     ZEDITOR_REMOTE_SCHEME = r"ssh://{}/{}"
-    zeditor_remote_command = [
-        "/usr/bin/zeditor",
-        "-n",
-        ZEDITOR_REMOTE_SCHEME.format(parsed_envvars.source_addr, str(foler_name))
-    ]
-    zeditor_remote_command = zeditor_env + zeditor_remote_command
-    
-    ssh_command = ssh_connect_command + [" ".join(zeditor_remote_command)]
+    remote_command = format_shell_command(
+        [
+            ("XAUTHORITY", parsed_envvars.xauthority),
+            ("DISPLAY", parsed_envvars.xdisplay),
+            ("WAYLAND_DISPLAY", parsed_envvars.wayland_display),
+        ],
+        [
+            "/usr/bin/zeditor",
+            "-n",
+            ZEDITOR_REMOTE_SCHEME.format(parsed_envvars.source_addr, str(foler_name)),
+        ],
+    )
+
+    ssh_command = ssh_connect_command + [remote_command]
     # print(ssh_command)
     subprocess.run(ssh_command)
 
