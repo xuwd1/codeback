@@ -68,9 +68,10 @@ def adjust_ssh_known_hosts(
             pubkey_record_string = f"{host} {pubkey}"
             known_hosts_file.write(pubkey_record_string + "\n")
 
-def back_trigger_devin_desktop(folder_name, parsed_envvars, username):
+def back_trigger_devin_desktop(folder_name, parsed_envvars, username, use_next=False):
     adjust_ssh_known_hosts(parsed_envvars)
     ssh_connect_command = ["ssh", f"{username}@localhost", "-p", f"{parsed_envvars.reverse_port}"]
+    desktop_binary = "/usr/bin/devin-desktop-next" if use_next else "/usr/bin/devin-desktop"
     remote_command = format_shell_command(
         [
             ("XAUTHORITY", parsed_envvars.xauthority),
@@ -78,7 +79,7 @@ def back_trigger_devin_desktop(folder_name, parsed_envvars, username):
             ("WAYLAND_DISPLAY", parsed_envvars.wayland_display),
         ],
         [
-            "/usr/bin/devin-desktop",
+            desktop_binary,
             "-n",
             "--remote",
             "ssh-remote+" + parsed_envvars.source_addr,
@@ -95,11 +96,12 @@ if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description="Back open devin-desktop window through ssh tunnel")
     argparser.add_argument("folder_name", help="The foldername to open in devin-desktop")
     argparser.add_argument("username", help="The username to use for the connection", default=DEFAULT_USERNAME, type=str, nargs="?")
+    argparser.add_argument("--next", help="Use devin-desktop-next instead of devin-desktop", action="store_true")
 
     args = argparser.parse_args()
     folder_name = pathlib.Path(args.folder_name).resolve().absolute()
 
     parsed_envvars = ParsedEnvVars()
     
-    back_trigger_devin_desktop(folder_name, parsed_envvars, args.username)
+    back_trigger_devin_desktop(folder_name, parsed_envvars, args.username, args.next)
     
